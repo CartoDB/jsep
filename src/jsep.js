@@ -198,7 +198,7 @@
 				// This function is responsible for gobbling an individual expression,
 				// e.g. `1`, `1+2`, `a+(b*2)-Math.sqrt(2)`
 				gobbleBinaryExpression = function() {
-					var ch_i, node, biop, prec, stack, biop_info, left, right, i;
+					var ch_i, node, biop, prec, stack, biop_info, left, right, i, cur_biop;
 
 					// First, try to get the leftmost thing
 					// Then, check to see if there's a binary operator operating on that leftmost thing
@@ -229,6 +229,7 @@
 						}
 						biop_info = { value: biop, prec: prec };
 
+						cur_biop = biop;
 						// Reduce: make a binary expression from the three topmost entries.
 						while ((stack.length > 2) && (prec <= stack[stack.length - 2].prec)) {
 							right = stack.pop();
@@ -240,7 +241,7 @@
 
 						node = gobbleToken();
 						if(!node) {
-							throwError("Expected expression after " + biop, index);
+							throwError("Expected expression after " + cur_biop, index);
 						}
 						stack.push(biop_info, node);
 					}
@@ -432,15 +433,30 @@
 				// e.g. `foo(bar, baz)`, `my_func()`, or `[bar, baz]`
 				gobbleArguments = function(termination) {
 					var ch_i, args = [], node, closed = false;
+					var separator_count = 0;
 					while(index < length) {
 						gobbleSpaces();
 						ch_i = exprICode(index);
 						if(ch_i === termination) { // done parsing
 							closed = true;
 							index++;
+							if(termination === CPAREN_CODE && separator_count && separator_count >= args.length){
+								throwError('Unexpected token ' + String.fromCharCode(termination), index);
+							}
 							break;
 						} else if (ch_i === COMMA_CODE) { // between expressions
 							index++;
+							separator_count++;
+							if(separator_count !== args.length) { // missing argument
+								if(termination === CPAREN_CODE) {
+									throwError('Unexpected token ,', index);
+								}
+								else if(termination === CBRACK_CODE) {
+									for(var arg = args.length; arg< separator_count; arg++) {
+										args.push(null);
+									}
+								}
+							}
 						} else {
 							node = gobbleExpression();
 							if(!node || node.type === COMPOUND) {
@@ -599,7 +615,8 @@
 	 * @return jsep
 	 */
 	jsep.addIdentifierChar = function(char) {
-		additional_identifier_chars[char] = t; return this;
+		additional_identifier_chars[char] = t;
+		return this;
 	};
 
 	/**
